@@ -10,7 +10,6 @@ export const getIcon = (iconName) => {
   if (typeof iconName === 'string' && iconName.includes('-')) {
     const pascalCase = iconName
       .split('-')
-  Megaphone,
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
       .join('');
     if (Icons[pascalCase] && typeof Icons[pascalCase] === 'function') {
@@ -31,4 +30,3 @@ export const getIcon = (iconName) => {
   // Fallback to Smile if icon not found
   return Icons.Smile;
 };
-    case 'Megaphone': return Megaphone;
