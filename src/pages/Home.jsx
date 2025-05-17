@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { getIcon } from '../utils/iconUtils';
 import MainFeature from '../components/MainFeature';
+import AnnouncementBoard from '../components/AnnouncementBoard';
 
 const Home = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -15,12 +16,14 @@ const Home = () => {
   const FileTextIcon = getIcon('FileText');
   const SettingsIcon = getIcon('Settings');
   const MenuIcon = getIcon('Menu');
+  const MegaphoneIcon = getIcon('Megaphone');
   const XIcon = getIcon('X');
   
   const tabs = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChartIcon },
     { id: 'employees', name: 'Employees', icon: UsersIcon },
     { id: 'leave', name: 'Leave Management', icon: CalendarIcon },
+    { id: 'announcements', name: 'Announcements', icon: MegaphoneIcon },
     { id: 'documents', name: 'Documents', icon: FileTextIcon },
     { id: 'profile', name: 'Profile', icon: UserCircleIcon },
     { id: 'settings', name: 'Settings', icon: SettingsIcon },
@@ -30,7 +33,7 @@ const Home = () => {
     setActiveTab(tabId);
     setSidebarOpen(false);
     
-    if (tabId !== 'employees') {
+    if (tabId !== 'employees' && tabId !== 'announcements') {
       toast.info(`${tabId.charAt(0).toUpperCase() + tabId.slice(1)} module will be available in the next update.`);
     }
   };
@@ -108,6 +111,8 @@ const Home = () => {
       <div className="flex-grow p-4 lg:p-8 bg-surface-50 dark:bg-surface-900">
         {activeTab === 'employees' ? (
           <MainFeature />
+        ) : activeTab === 'announcements' ? (
+          <AnnouncementBoard />
         ) : (
           <div className="flex flex-col items-center justify-center h-full">
             <div className="text-center max-w-md">
