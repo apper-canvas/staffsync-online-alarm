@@ -3,34 +3,14 @@ import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { getIcon } from '../utils/iconUtils';
 import AnnouncementForm from './AnnouncementForm';
+import { fetchAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } from '../services/announcementService';
 
 const AnnouncementBoard = () => {
-  const [announcements, setAnnouncements] = useState([
-    {
-      id: 1,
-      title: 'Company Picnic',
-      content: 'Join us for our annual company picnic on Saturday, June 15th at Central Park. Family and friends are welcome!',
-      author: 'HR Team',
-      importance: 'medium',
-      date: '2023-05-20T10:30:00',
-    },
-    {
-      id: 2,
-      title: 'New Health Insurance Policy',
-      content: 'Our company is switching to a new health insurance provider starting next month. Please check your email for enrollment details.',
-      author: 'Benefits Department',
-      importance: 'high',
-      date: '2023-05-18T14:15:00',
-    },
-    {
-      id: 3,
-      title: 'Office Renovation Schedule',
-      content: 'The office renovation project will begin next week. Please check the schedule for when your department will be temporarily relocated.',
-      author: 'Facilities Management',
-      importance: 'medium',
-      date: '2023-05-15T09:00:00',
-    }
-  ]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
@@ -40,33 +20,102 @@ const AnnouncementBoard = () => {
   const MegaphoneIcon = getIcon('Megaphone');
   const PencilIcon = getIcon('Pencil');
   const TrashIcon = getIcon('Trash');
-  
-  const handleCreateAnnouncement = (newAnnouncement) => {
-    const announcementWithId = {
-      ...newAnnouncement,
-      id: Date.now(),
-      date: new Date().toISOString(),
+
+  // Load announcements when component mounts
+  useEffect(() => {
+    const loadAnnouncements = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchAnnouncements(true); // sort by date, newest first
+        setAnnouncements(data);
+      } catch (err) {
+        setError('Failed to load announcements');
+        toast.error('Error loading announcements');
+      } finally {
+        setLoading(false);
+      }
     };
-    
-    setAnnouncements([announcementWithId, ...announcements]);
-    setIsFormOpen(false);
-    toast.success('Announcement created successfully!');
+    loadAnnouncements();
+  }, []);
+  
+  const handleCreateAnnouncement = async (newAnnouncement) => {
+    try {
+      setSubmitting(true);
+      // Format data for API
+      const announcementData = {
+        title: newAnnouncement.title,
+        content: newAnnouncement.content,
+        author: newAnnouncement.author,
+        importance: newAnnouncement.importance,
+        date: new Date().toISOString(),
+        // Set Name field for consistent display
+        Name: newAnnouncement.title
+      };
+      
+      await createAnnouncement(announcementData);
+      
+      // Refresh announcements list
+      const updatedAnnouncements = await fetchAnnouncements(true);
+      setAnnouncements(updatedAnnouncements);
+      
+      setIsFormOpen(false);
+      toast.success('Announcement created successfully!');
+    } catch (error) {
+      toast.error('Failed to create announcement');
+    } finally {
+      setSubmitting(false);
+    }
   };
   
-  const handleEditAnnouncement = (updatedAnnouncement) => {
-    setAnnouncements(
-      announcements.map(announcement => 
-        announcement.id === updatedAnnouncement.id ? updatedAnnouncement : announcement
-      )
-    );
-    setEditingAnnouncement(null);
-    toast.success('Announcement updated successfully!');
+  const handleEditAnnouncement = async (updatedAnnouncement) => {
+    try {
+      setSubmitting(true);
+      
+      // Format data for API
+      const announcementData = {
+        Id: updatedAnnouncement.id,
+        title: updatedAnnouncement.title,
+        content: updatedAnnouncement.content,
+        author: updatedAnnouncement.author,
+        importance: updatedAnnouncement.importance,
+        // Keep original date if exists, or set current date
+        date: (editingAnnouncement && editingAnnouncement.date) || new Date().toISOString(),
+        // Set Name field for consistent display
+        Name: updatedAnnouncement.title
+      };
+      
+      await updateAnnouncement(announcementData);
+      
+      // Refresh announcements list
+      const updatedAnnouncements = await fetchAnnouncements(true);
+      setAnnouncements(updatedAnnouncements);
+      
+      setEditingAnnouncement(null);
+      toast.success('Announcement updated successfully!');
+    } catch (error) {
+      toast.error('Failed to update announcement');
+    } finally {
+      setSubmitting(false);
+    }
   };
   
-  const handleDeleteAnnouncement = (id) => {
-    setAnnouncements(announcements.filter(announcement => announcement.id !== id));
-    setShowDeleteConfirm(null);
-    toast.success('Announcement deleted successfully!');
+  const handleDeleteAnnouncement = async (id) => {
+    try {
+      setDeleting(true);
+      await deleteAnnouncement(id);
+      
+      // Refresh announcements list
+      const updatedAnnouncements = await fetchAnnouncements(true);
+      setAnnouncements(updatedAnnouncements);
+      
+      setShowDeleteConfirm(null);
+      toast.success('Announcement deleted successfully!');
+    } catch (error) {
+      toast.error('Failed to delete announcement');
+    } finally {
+      setDeleting(false);
+    }
   };
   
   const formatDate = (dateString) => {
@@ -86,6 +135,14 @@ const AnnouncementBoard = () => {
     }
   };
   
+  // Loading state
+  if (loading && announcements.length === 0) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -95,14 +152,15 @@ const AnnouncementBoard = () => {
         </div>
         <button 
           onClick={() => setIsFormOpen(true)}
-          className="btn-primary flex items-center"
+          className="btn-primary flex items-center disabled:opacity-70"
+          disabled={submitting}
         >
           <PlusIcon className="w-5 h-5 mr-1" />
-          New Announcement
+          {submitting ? 'Processing...' : 'New Announcement'}
         </button>
       </div>
       
-      {announcements.length === 0 ? (
+      {!loading && announcements.length === 0 ? (
         <div className="card p-8 text-center">
           <MegaphoneIcon className="w-12 h-12 mx-auto mb-4 text-surface-400" />
           <h3 className="text-xl mb-2">No Announcements Yet</h3>
@@ -111,20 +169,36 @@ const AnnouncementBoard = () => {
         </div>
       ) : (
         <div className="space-y-4">
+          {loading && announcements.length > 0 && (
+            <div className="card p-4 bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-700">
+              <p className="text-yellow-700 dark:text-yellow-300 flex items-center">
+                <span className="w-4 h-4 border-2 border-yellow-700 dark:border-yellow-300 border-t-transparent rounded-full animate-spin mr-2"></span>
+                Refreshing announcements...
+              </p>
+            </div>
+          )}
           {announcements.map(announcement => (
             <motion.div 
-              key={announcement.id}
+              key={announcement.Id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="card"
             >
               <div className="flex justify-between mb-3">
-                <h3 className="text-xl font-bold">{announcement.title}</h3>
+                <h3 className="text-xl font-bold text-surface-900 dark:text-white">{announcement.title}</h3>
                 <div className="flex space-x-2">
-                  <button onClick={() => setEditingAnnouncement(announcement)} className="p-1.5 text-surface-500 hover:text-primary rounded-full hover:bg-surface-100 dark:hover:bg-surface-700">
+                  <button 
+                    onClick={() => setEditingAnnouncement(announcement)} 
+                    className="p-1.5 text-surface-500 hover:text-primary rounded-full hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-50"
+                    disabled={submitting || deleting}
+                  >
                     <PencilIcon className="w-5 h-5" />
                   </button>
-                  <button onClick={() => setShowDeleteConfirm(announcement.id)} className="p-1.5 text-surface-500 hover:text-red-500 rounded-full hover:bg-surface-100 dark:hover:bg-surface-700">
+                  <button 
+                    onClick={() => setShowDeleteConfirm(announcement.Id)} 
+                    className="p-1.5 text-surface-500 hover:text-red-500 rounded-full hover:bg-surface-100 dark:hover:bg-surface-700 disabled:opacity-50"
+                    disabled={submitting || deleting}
+                  >
                     <TrashIcon className="w-5 h-5" />
                   </button>
                 </div>
@@ -163,10 +237,11 @@ const AnnouncementBoard = () => {
             <h3 className="text-xl font-bold mb-4">Delete Announcement</h3>
             <p className="mb-6 text-surface-600 dark:text-surface-300">Are you sure you want to delete this announcement? This action cannot be undone.</p>
             <div className="flex justify-end space-x-3">
-              <button onClick={() => setShowDeleteConfirm(null)} className="btn bg-surface-200 dark:bg-surface-700 text-surface-800 dark:text-surface-200 hover:bg-surface-300 dark:hover:bg-surface-600">
+              <button onClick={() => setShowDeleteConfirm(null)} className="btn bg-surface-200 dark:bg-surface-700 text-surface-800 dark:text-surface-200 hover:bg-surface-300 dark:hover:bg-surface-600 disabled:opacity-50" disabled={deleting}>
                 Cancel
               </button>
-              <button onClick={() => handleDeleteAnnouncement(showDeleteConfirm)} className="btn bg-red-500 text-white hover:bg-red-600">
+              <button onClick={() => handleDeleteAnnouncement(showDeleteConfirm)} className="btn bg-red-500 text-white hover:bg-red-600 disabled:opacity-50" disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete'}
                 Delete
               </button>
             </div>

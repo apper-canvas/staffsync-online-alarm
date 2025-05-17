@@ -2,146 +2,180 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { getIcon } from '../utils/iconUtils';
 
-const AnnouncementForm = ({ announcement, onClose, onSave }) => {
+const AnnouncementForm = ({ announcement = null, onClose, onSave }) => {
   const [formData, setFormData] = useState({
+    id: '',
     title: '',
     content: '',
     author: '',
     importance: 'medium'
   });
   
-  const [errors, setErrors] = useState({});
+  const [formErrors, setFormErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
   
+  // Icons
   const XIcon = getIcon('X');
+  const SaveIcon = getIcon('Save');
   
+  // If editing an existing announcement, pre-fill form
   useEffect(() => {
     if (announcement) {
       setFormData({
-        id: announcement.id,
-        title: announcement.title,
-        content: announcement.content,
-        author: announcement.author,
-        importance: announcement.importance,
-        date: announcement.date
+        id: announcement.Id || announcement.id,
+        title: announcement.title || '',
+        content: announcement.content || '',
+        author: announcement.author || '',
+        importance: announcement.importance || 'medium'
       });
-    } else {
-      // Default author when creating new announcement
-      setFormData(prev => ({
-        ...prev,
-        author: 'HR Manager' // This would normally come from auth context
-      }));
     }
   }, [announcement]);
   
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    // Clear error message when field is edited
+    if (formErrors[name]) {
+      setFormErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+  
   const validateForm = () => {
-    let newErrors = {};
-    let isValid = true;
+    const errors = {};
     
     if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
-      isValid = false;
-    } else if (formData.title.length < 5) {
-      newErrors.title = 'Title must be at least 5 characters';
-      isValid = false;
+      errors.title = 'Title is required';
     }
     
     if (!formData.content.trim()) {
-      newErrors.content = 'Content is required';
-      isValid = false;
-    } else if (formData.content.length < 10) {
-      newErrors.content = 'Content must be at least 10 characters';
-      isValid = false;
+      errors.content = 'Content is required';
     }
     
     if (!formData.author.trim()) {
-      newErrors.author = 'Author is required';
-      isValid = false;
+      errors.author = 'Author is required';
     }
     
-    setErrors(newErrors);
-    return isValid;
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
   
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    if (validateForm()) {
-      onSave(formData);
+    if (!validateForm()) {
+      return;
     }
-  };
-  
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
     
-    // Clear error when user types
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: undefined
-      }));
-    }
+    setSubmitting(true);
+    
+    // Pass the form data to parent component
+    onSave(formData);
+    setSubmitting(false);
   };
   
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.9 }}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="bg-white dark:bg-surface-800 rounded-xl shadow-soft max-w-2xl w-full"
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white dark:bg-surface-800 rounded-xl shadow-lg max-w-2xl w-full"
       >
-        <div className="flex justify-between items-center border-b border-surface-200 dark:border-surface-700 p-4">
-          <h3 className="text-xl font-bold">
+        <div className="p-6 border-b border-surface-200 dark:border-surface-700 flex justify-between items-center">
+          <h2 className="text-xl font-bold">
             {announcement ? 'Edit Announcement' : 'Create New Announcement'}
-          </h3>
-          <button 
+          </h2>
+          <button
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-surface-100 dark:hover:bg-surface-700"
+            className="p-2 rounded-full hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
+            aria-label="Close modal"
           >
             <XIcon className="w-5 h-5" />
           </button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="mb-4">
-            <label htmlFor="title" className="block mb-1 font-medium">Title</label>
-            <input type="text" id="title" name="title" value={formData.title} onChange={handleChange} 
-              className={`input-field ${errors.title ? 'border-red-500 dark:border-red-500' : ''}`} />
-            {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div>
+            <label htmlFor="title" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+              Title <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              value={formData.title}
+              onChange={handleInputChange}
+              className={`input-field ${formErrors.title ? 'border-red-500 dark:border-red-500' : ''}`}
+            />
+            {formErrors.title && <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>}
           </div>
           
-          <div className="mb-4">
-            <label htmlFor="content" className="block mb-1 font-medium">Content</label>
-            <textarea id="content" name="content" value={formData.content} onChange={handleChange} rows="5"
-              className={`input-field ${errors.content ? 'border-red-500 dark:border-red-500' : ''}`}></textarea>
-            {errors.content && <p className="text-red-500 text-sm mt-1">{errors.content}</p>}
+          <div>
+            <label htmlFor="content" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+              Content <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              id="content"
+              name="content"
+              rows="4"
+              value={formData.content}
+              onChange={handleInputChange}
+              className={`input-field ${formErrors.content ? 'border-red-500 dark:border-red-500' : ''}`}
+            ></textarea>
+            {formErrors.content && <p className="text-red-500 text-sm mt-1">{formErrors.content}</p>}
           </div>
           
-          <div className="mb-4">
-            <label htmlFor="importance" className="block mb-1 font-medium">Importance Level</label>
-            <select id="importance" name="importance" value={formData.importance} onChange={handleChange} className="input-field">
-              <option value="low">Low Priority</option>
-              <option value="medium">Medium Priority</option>
-              <option value="high">High Priority</option>
-            </select>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="author" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                Author <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="author"
+                name="author"
+                value={formData.author}
+                onChange={handleInputChange}
+                className={`input-field ${formErrors.author ? 'border-red-500 dark:border-red-500' : ''}`}
+              />
+              {formErrors.author && <p className="text-red-500 text-sm mt-1">{formErrors.author}</p>}
+            </div>
+            
+            <div>
+              <label htmlFor="importance" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                Importance
+              </label>
+              <select
+                id="importance"
+                name="importance"
+                value={formData.importance}
+                onChange={handleInputChange}
+                className="input-field"
+              >
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
           </div>
           
-          <div className="mb-6">
-            <label htmlFor="author" className="block mb-1 font-medium">Author</label>
-            <input type="text" id="author" name="author" value={formData.author} onChange={handleChange} 
-              className={`input-field ${errors.author ? 'border-red-500 dark:border-red-500' : ''}`} />
-            {errors.author && <p className="text-red-500 text-sm mt-1">{errors.author}</p>}
-          </div>
-          
-          <div className="flex justify-end space-x-3">
-            <button type="button" onClick={onClose} className="btn bg-surface-200 dark:bg-surface-700 text-surface-800 dark:text-surface-200 hover:bg-surface-300 dark:hover:bg-surface-600">
+          <div className="flex justify-end space-x-3 pt-4 border-t border-surface-200 dark:border-surface-700">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors"
+              disabled={submitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              {announcement ? 'Update' : 'Create'} Announcement
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-primary flex items-center"
+            >
+              <SaveIcon className="w-5 h-5 mr-1.5" />
+              {submitting ? 'Saving...' : announcement ? 'Update' : 'Create'}
             </button>
           </div>
         </form>

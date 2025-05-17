@@ -1,13 +1,19 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
+import { useSelector } from 'react-redux';
+import { useContext } from 'react';
 import { getIcon } from '../utils/iconUtils';
+import { AuthContext } from '../App';
 import MainFeature from '../components/MainFeature';
 import AnnouncementBoard from '../components/AnnouncementBoard';
 
 const Home = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { logout } = useContext(AuthContext);
+  const { user } = useSelector(state => state.user);
+  
   
   const UserCircleIcon = getIcon('UserCircle');
   const UsersIcon = getIcon('Users');
@@ -18,6 +24,8 @@ const Home = () => {
   const MenuIcon = getIcon('Menu');
   const MegaphoneIcon = getIcon('Megaphone');
   const XIcon = getIcon('X');
+  const LogOutIcon = getIcon('LogOut');
+  
   
   const tabs = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChartIcon },
@@ -95,13 +103,16 @@ const Home = () => {
           
           <div className="pt-6 mt-6 border-t border-surface-200 dark:border-surface-700">
             <div className="flex items-center space-x-3 px-4">
-              <div className="w-10 h-10 rounded-full bg-primary-light/30 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-primary-light/30 flex items-center justify-center text-sm">
                 <UserCircleIcon className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm">HR Manager</p>
-                <p className="text-xs text-surface-500">admin@staffsync.com</p>
+                <p className="font-medium text-sm">{user?.firstName || 'User'}</p>
+                <p className="text-xs text-surface-500">{user?.emailAddress || 'user@example.com'}</p>
               </div>
+              <button onClick={logout} className="ml-auto p-2 text-surface-500 hover:text-red-500 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-full" title="Logout">
+                <LogOutIcon className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>

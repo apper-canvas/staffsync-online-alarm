@@ -3,45 +3,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import { getIcon } from '../utils/iconUtils';
+import { fetchEmployees, createEmployee, updateEmployee, deleteEmployee } from '../services/employeeService';
 
 const MainFeature = () => {
   // Employee management state
-  const [employees, setEmployees] = useState(() => {
-    const savedEmployees = localStorage.getItem('employees');
-    return savedEmployees ? JSON.parse(savedEmployees) : [
-      {
-        id: '1',
-        firstName: 'John',
-        lastName: 'Doe',
-        email: 'john.doe@staffsync.com',
-        position: 'Frontend Developer',
-        department: 'Engineering',
-        status: 'Active',
-        joinDate: '2022-03-15'
-      },
-      {
-        id: '2',
-        firstName: 'Jane',
-        lastName: 'Smith',
-        email: 'jane.smith@staffsync.com',
-        position: 'UX Designer',
-        department: 'Design',
-        status: 'Active',
-        joinDate: '2021-11-08'
-      },
-      {
-        id: '3',
-        firstName: 'Michael',
-        lastName: 'Johnson',
-        email: 'michael.j@staffsync.com',
-        position: 'Project Manager',
-        department: 'Management',
-        status: 'On Leave',
-        joinDate: '2020-07-22'
-      }
-    ];
-  });
-  
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [loadingEmployee, setLoadingEmployee] = useState(null); // For tracking which employee is being deleted
+
+  // Form and UI state  
   const [formData, setFormData] = useState({
     id: '',
     firstName: '',
@@ -80,32 +53,32 @@ const MainFeature = () => {
   const MailIcon = getIcon('Mail');
   const AlertCircleIcon = getIcon('AlertCircle');
   
-  // Save employees to localStorage whenever it changes
+  // Load employees on component mount and when filters change
   useEffect(() => {
-    localStorage.setItem('employees', JSON.stringify(employees));
-  }, [employees]);
-  
+    const loadEmployees = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const filters = {
+          searchTerm: searchTerm,
+          status: filterStatus,
+          sortField: sortConfig.key,
+          sortDirection: sortConfig.direction
+        };
+        const data = await fetchEmployees(filters);
+        setEmployees(data);
+      } catch (err) {
+        setError('Failed to load employees. Please try again later.');
+        toast.error('Error loading employees');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadEmployees();
+  }, [searchTerm, filterStatus, sortConfig.key, sortConfig.direction]);
+
   // Filter and sort employees
-  const filteredEmployees = employees.filter(employee => {
-    const matchesSearch = 
-      employee.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.department.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = filterStatus === 'All' || employee.status === filterStatus;
-    
-    return matchesSearch && matchesStatus;
-  }).sort((a, b) => {
-    if (a[sortConfig.key] < b[sortConfig.key]) {
-      return sortConfig.direction === 'ascending' ? -1 : 1;
-    }
-    if (a[sortConfig.key] > b[sortConfig.key]) {
-      return sortConfig.direction === 'ascending' ? 1 : -1;
-    }
-    return 0;
-  });
+  const filteredEmployees = employees;
   
   // Form handling
   const handleInputChange = (e) => {
@@ -129,7 +102,7 @@ const MainFeature = () => {
   
   const openModal = (employee = null) => {
     if (employee) {
-      setFormData({...employee});
+      setFormData({...employee, id: employee.Id});
       setIsEditing(true);
     } else {
       resetForm();
@@ -144,49 +117,107 @@ const MainFeature = () => {
   };
   
   // CRUD operations
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
     // Form validation
-    if (!formData.firstName || !formData.lastName || !formData.email) {
+    if (!formData.firstName?.trim() || !formData.lastName?.trim() || !formData.email?.trim()) {
       toast.error("Please fill in all required fields");
       return;
     }
     
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (!emailRegex.test(formData.email?.trim())) {
       toast.error("Please enter a valid email address");
       return;
     }
     
-    if (isEditing) {
-      // Update employee
-      const updatedEmployees = employees.map(emp => 
-        emp.id === formData.id ? formData : emp
-      );
-      setEmployees(updatedEmployees);
-      toast.success(`${formData.firstName} ${formData.lastName}'s information has been updated`);
-    } else {
-      // Add new employee
-      const newEmployee = {
-        ...formData,
-        id: Date.now().toString()
-      };
-      setEmployees([...employees, newEmployee]);
-      toast.success(`${newEmployee.firstName} ${newEmployee.lastName} has been added to the team`);
-    }
+    setSubmitting(true);
     
-    closeModal();
+    try {
+      if (isEditing) {
+        // Update employee
+        const employeeData = {
+          Id: formData.id,
+          firstName: formData.firstName?.trim(),
+          lastName: formData.lastName?.trim(),
+          email: formData.email?.trim(),
+          position: formData.position?.trim(),
+          department: formData.department?.trim(),
+          status: formData.status,
+          joinDate: formData.joinDate,
+          // Set Name field to combined first and last name for consistent display
+          Name: `${formData.firstName?.trim()} ${formData.lastName?.trim()}`
+        };
+
+        await updateEmployee(employeeData);
+        toast.success(`${formData.firstName} ${formData.lastName}'s information has been updated`);
+        
+        // Refresh the employee list to show the update
+        const filters = {
+          searchTerm: searchTerm,
+          status: filterStatus,
+          sortField: sortConfig.key,
+          sortDirection: sortConfig.direction
+        };
+        const updatedEmployees = await fetchEmployees(filters);
+        setEmployees(updatedEmployees);
+      } else {
+        // Add new employee
+        const newEmployee = {
+          firstName: formData.firstName?.trim(),
+          lastName: formData.lastName?.trim(),
+          email: formData.email?.trim(),
+          position: formData.position?.trim(),
+          department: formData.department?.trim(),
+          status: formData.status,
+          joinDate: formData.joinDate,
+          // Set Name field to combined first and last name for consistent display
+          Name: `${formData.firstName?.trim()} ${formData.lastName?.trim()}`
+        };
+        
+        await createEmployee(newEmployee);
+        toast.success(`${newEmployee.firstName} ${newEmployee.lastName} has been added to the team`);
+        
+        // Refresh the employee list to show the new employee
+        const filters = {
+          searchTerm: searchTerm,
+          status: filterStatus,
+          sortField: sortConfig.key,
+          sortDirection: sortConfig.direction
+        };
+        const updatedEmployees = await fetchEmployees(filters);
+        setEmployees(updatedEmployees);
+      }
+      closeModal();
+    } catch (error) {
+      toast.error(isEditing ? 'Failed to update employee' : 'Failed to add employee');
+    } finally {
+      setSubmitting(false);
+    }
   };
   
-  const handleDelete = (id) => {
-    const employeeToDelete = employees.find(emp => emp.id === id);
+  const handleDelete = async (id) => {
+    const employeeToDelete = employees.find(emp => emp.Id === id);
     
-    if (confirm(`Are you sure you want to delete ${employeeToDelete.firstName} ${employeeToDelete.lastName}?`)) {
-      const updatedEmployees = employees.filter(emp => emp.id !== id);
-      setEmployees(updatedEmployees);
-      toast.success(`Employee has been removed`);
+    if (window.confirm(`Are you sure you want to delete ${employeeToDelete.firstName} ${employeeToDelete.lastName}?`)) {
+      try {
+        setDeleting(true);
+        setLoadingEmployee(id);
+        await deleteEmployee(id);
+        
+        // Update the local state to remove the deleted employee
+        const updatedEmployees = employees.filter(emp => emp.Id !== id);
+        setEmployees(updatedEmployees);
+        
+        toast.success(`${employeeToDelete.firstName} ${employeeToDelete.lastName} has been removed`);
+      } catch (error) {
+        toast.error('Failed to delete employee');
+      } finally {
+        setDeleting(false);
+        setLoadingEmployee(null);
+      }
     }
   };
   
@@ -209,7 +240,7 @@ const MainFeature = () => {
     return <SortDescIcon className="w-4 h-4" />;
   };
   
-  // Get status badge color
+  // UI Helper functions
   const getStatusColor = (status) => {
     switch (status) {
       case 'Active':
@@ -222,6 +253,15 @@ const MainFeature = () => {
         return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
     }
   };
+
+  // Render loading state
+  if (loading && employees.length === 0) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
   
   return (
     <div className="w-full">
@@ -248,7 +288,7 @@ const MainFeature = () => {
           </button>
         </div>
         
-        <div className="bg-white dark:bg-surface-800 rounded-xl shadow-card border border-surface-200 dark:border-surface-700 p-4 md:p-6">
+        <div className="bg-white dark:bg-surface-800 rounded-xl shadow-card border border-surface-200 dark:border-surface-700 p-4 md:p-6 relative">
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             {/* Search Bar */}
             <div className="relative flex-grow">
@@ -308,7 +348,17 @@ const MainFeature = () => {
             </div>
           </div>
           
-          {filteredEmployees.length === 0 ? (
+          {/* Loading overlay */}
+          {loading && filteredEmployees.length > 0 && (
+            <div className="absolute inset-0 bg-white/70 dark:bg-surface-800/70 flex items-center justify-center rounded-xl z-10">
+              <div className="flex flex-col items-center">
+                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-surface-700 dark:text-surface-300">Updating employee data...</p>
+              </div>
+            </div>
+          )}
+
+          {!loading && filteredEmployees.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4">
               <div className="w-16 h-16 mb-4 rounded-full bg-surface-100 dark:bg-surface-700 flex items-center justify-center">
                 <AlertCircleIcon className="w-8 h-8 text-surface-400" />
@@ -338,7 +388,7 @@ const MainFeature = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredEmployees.map(employee => (
                 <motion.div
-                  key={employee.id}
+                  key={employee.Id}
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.3 }}
@@ -348,15 +398,15 @@ const MainFeature = () => {
                     <div className="absolute top-4 right-4 flex space-x-2">
                       <button
                         onClick={() => openModal(employee)}
-                        className="p-1.5 bg-white dark:bg-surface-600 rounded-full shadow-sm hover:bg-surface-100 dark:hover:bg-surface-500 transition-colors"
+                        className="p-1.5 bg-white dark:bg-surface-600 rounded-full shadow-sm hover:bg-surface-100 dark:hover:bg-surface-500 transition-colors disabled:opacity-50"
+                        disabled={submitting}
                         aria-label="Edit employee"
                       >
                         <PenIcon className="w-4 h-4 text-primary dark:text-primary-light" />
                       </button>
                       <button
-                        onClick={() => handleDelete(employee.id)}
-                        className="p-1.5 bg-white dark:bg-surface-600 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                        aria-label="Delete employee"
+                        onClick={() => handleDelete(employee.Id)}
+                        className="p-1.5 bg-white dark:bg-surface-600 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50" aria-label="Delete employee" disabled={deleting && loadingEmployee === employee.Id}
                       >
                         <TrashIcon className="w-4 h-4 text-red-500" />
                       </button>
@@ -476,9 +526,9 @@ const MainFeature = () => {
                 <tbody className="bg-white dark:bg-surface-800 divide-y divide-surface-200 dark:divide-surface-700">
                   {filteredEmployees.map(employee => (
                     <motion.tr 
-                      key={employee.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
+                    key={employee.Id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                       transition={{ duration: 0.3 }}
                       className="hover:bg-surface-50 dark:hover:bg-surface-700/70"
                     >
@@ -515,15 +565,14 @@ const MainFeature = () => {
                         <div className="flex justify-end space-x-2">
                           <button
                             onClick={() => openModal(employee)}
-                            className="p-1.5 bg-surface-100 dark:bg-surface-700 rounded hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors"
+                            className="p-1.5 bg-surface-100 dark:bg-surface-700 rounded hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50" disabled={submitting}
                             aria-label="Edit employee"
                           >
                             <PenIcon className="w-4 h-4 text-primary dark:text-primary-light" />
                           </button>
                           <button
-                            onClick={() => handleDelete(employee.id)}
-                            className="p-1.5 bg-surface-100 dark:bg-surface-700 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                            aria-label="Delete employee"
+                            onClick={() => handleDelete(employee.Id)}
+                            className="p-1.5 bg-surface-100 dark:bg-surface-700 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50" aria-label="Delete employee" disabled={deleting && loadingEmployee === employee.Id}
                           >
                             <TrashIcon className="w-4 h-4 text-red-500" />
                           </button>
@@ -691,7 +740,7 @@ const MainFeature = () => {
                   <button
                     type="submit"
                     className="btn-primary flex items-center"
-                  >
+                    disabled={submitting}>
                     <CheckIcon className="w-5 h-5 mr-1.5" />
                     {isEditing ? "Update Employee" : "Add Employee"}
                   </button>
